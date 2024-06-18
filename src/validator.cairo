@@ -5,7 +5,8 @@ trait IValidatorTrait <TContractState> {
     fn stake(ref self: TContractState, amount: u128) -> bool;
     fn unstake(ref self: TContractState) -> bool;
     fn validate_campaign(ref self: TContractState, campaign_id: u32) -> bool;
-    fn get_validators(self: @TContractState) -> Array<Validator::ValidatorInfo>;
+    fn get_all_validators(self: @TContractState) -> Array<Validator::ValidatorInfo>;
+    fn get_active_validators(self: @TContractState) -> Array<Validator::ValidatorInfo>;
     fn get_campaign_validators(self: @TContractState, campaign_id: u32) -> Array<u32>;
     fn get_validator_id(self: @TContractState, address: ContractAddress) -> u32;
     fn get_validator(self: @TContractState, validator_id: u32) -> Validator::ValidatorInfo;
@@ -176,6 +177,62 @@ mod Validator {
                 campaign_id: campaign_id,
             });
             true
+        }
+
+        fn get_total_validators(self: @ContractState) -> Array<ValidatorInfo> {
+            let mut validators = Array::new();
+            let count = self.total_validators.read();
+
+            while count > 0 {
+                let validator = self.validators.read(count);
+                validators.push(validator);
+                count -= 1;
+            }
+            
+            validators
+        }
+
+        fn get_active_validators(self: @ContractState) -> Array<ValidatorInfo> {
+            let mut validators = Array::new();
+            let count = self.total_validators.read();
+
+            while count > 0 {
+                let validator = self.validators.read(count);
+
+                if validator.status == Status::Active {
+                    validators.push(validator);
+                }
+
+                count -= 1;
+            }
+            
+            validators
+        }
+
+        fn get_campaign_validators(self: @ContractState, campaign_id: u32) -> Array<u32> {
+            self.campaign_validations.read(campaign_id)
+        }
+
+        fn get_validator_id(self: @ContractState, address: ContractAddress) -> u32 {
+            let mut validator_id = 0;
+            let count = self.total_validators.read();
+
+            while count > 0 {
+                let validator = self.validators.read(count);
+
+                if validator.address == address {
+                    validator_id = validator.validator_id;
+                    break;
+                }
+
+                count -= 1;
+            }
+
+            validator_id
+        }
+
+        fn get_validator(self: @ContractState, validator_id: u32) -> ValidatorInfo {
+            self.validators.read(validator_id)
         }
     }
 }
