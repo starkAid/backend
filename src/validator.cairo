@@ -13,7 +13,8 @@ trait IValidatorTrait <TContractState> {
 
 #[starknet::contract]
 mod Validator {
-    use starknet::{ContractAddress, get_caller_address};
+    use starknet::{ContractAddress, get_caller_address, get_contract_address};
+    use starknet::syscalls::transfer;
 
     #[storage]
     struct Storage {
@@ -87,6 +88,8 @@ mod Validator {
             assert!(amount >= self.stake_amount.read(), "Staked amount is less than minimum stake amount");
 
             let caller = get_caller_address();
+            let contract_address = get_contract_address();
+
             if self.returning_validator(caller) {
                 let validator_id = self.get_validator_id.read(caller);
 
@@ -113,6 +116,13 @@ mod Validator {
             self.validator_stakes.write(new_validator_id, stake);
             self.total_active_validators.write(self.total_active_validators.read() + 1);
 
+            // Perform the transfer
+            transfer(contract_address, amount).unwrap();
+
+            // Update the contract's balance
+            let current_balance = self.total_stakes.read();
+            self.total_stakes.write(current_balance + amount);
+
             Event::Staked(Staked {
                 validator_id: validator_id,
                 stake: stake,
@@ -131,12 +141,39 @@ mod Validator {
 
             self.validators.write(validator_id, validator_info);
             self.validator_stakes.write(validator_id, 0);
-            self.total_stakes.write(self.total_stakes.read() - stake);
             self.total_active_validators.write(self.total_active_validators.read() - 1);
+
+            // Perform the transfer
+            transfer(contract_address, amount).unwrap();
+
+            // Update the contract's balance
+            let current_balance = self.total_stakes.read();
+            self.total_stakes.write(current_balance - stake);
 
             Event::Unstaked(Unstaked {
                 validator_id: validator_id,
                 stake: stake,
+            });
+            true
+        }
+
+        fn validate_campaign(ref self: ContractState, campaign_id: u32) -> bool {
+            let caller = get_caller_address();
+            let validator_id = self.get_validator_id.read(caller);
+
+            let mut validator_info = self.validators.read(validator_id);
+            validator_info.validated_campaigns.push(campaign_id);
+
+            self.validators.write(validator_id, validator_info);
+
+            let mut campaign_validators = self.campaign_validations.read(campaign_id);
+            campaign_validators.push(validator_id);
+
+            self.campaign_validations.write(campaign_id, campaign_validators);
+
+            Event::CampaignValidated(CampaignValidated {
+                validator_id: validator_id,
+                campaign_id: campaign_id,
             });
             true
         }
