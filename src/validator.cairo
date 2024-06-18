@@ -163,12 +163,12 @@ mod Validator {
             let validator_id = self.get_validator_id.read(caller);
 
             let mut validator_info = self.validators.read(validator_id);
-            validator_info.validated_campaigns.push(campaign_id);
+            validator_info.validated_campaigns.append(campaign_id);
 
             self.validators.write(validator_id, validator_info);
 
             let mut campaign_validators = self.campaign_validations.read(campaign_id);
-            campaign_validators.push(validator_id);
+            campaign_validators.append(validator_id);
 
             self.campaign_validations.write(campaign_id, campaign_validators);
 
@@ -185,7 +185,7 @@ mod Validator {
 
             while count > 0 {
                 let validator = self.validators.read(count);
-                validators.push(validator);
+                validators.append(validator);
                 count -= 1;
             }
             
@@ -200,7 +200,7 @@ mod Validator {
                 let validator = self.validators.read(count);
 
                 if validator.status == Status::Active {
-                    validators.push(validator);
+                    validators.append(validator);
                 }
 
                 count -= 1;
