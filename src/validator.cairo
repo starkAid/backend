@@ -14,8 +14,8 @@ trait IValidatorTrait <TContractState> {
 
 #[starknet::contract]
 pub mod Validator {
-    use starknet::{ContractAddress, get_caller_address, get_contract_address};
-    use starknet::syscalls::transfer;
+    use starknet::{ContractAddress, contract_address_const, get_caller_address, get_contract_address};
+    use openzeppelin::token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
 
     #[storage]
     struct Storage {
@@ -23,8 +23,12 @@ pub mod Validator {
         returning_validator: LegacyMap::<ContractAddress, bool>,
         total_validators: u32,
         total_active_validators: u32,
-        campaign_validations: LegacyMap::<u32, Array<u32>>,  // campaign_id to list of validator_ids
+        campaign_validators_count: LegacyMap::<u32, u32>, // campaign_id to campaign_validators_count
+        campaign_validators: LegacyMap::<(u32, u32), u32>,  // (campaign_id, campaign_validators_count) to campaign_validators_id
+        is_campaign_validated: LegacyMap::<(u32, u32), bool>, // (validator_id, campaign_id) to bool
         validator_stakes: LegacyMap::<u32, u128>,  // validator_id to staked amount
+        validator_campaign_count: LegacyMap::<u32, u32>,  // validator_id to no of validations
+        validated_campaigns: LegacyMap::<(u32, u32), u32>, // (validator_id, validator_campaign_count) to campaign_id
         stake_amount: u128,
         total_stakes: u128,
     }
@@ -74,7 +78,6 @@ pub mod Validator {
         pub stake: u128,
         pub address: ContractAddress,
         pub status: Status,
-        pub validated_campaigns: Array<u32>,
     }
 
     #[constructor]
@@ -91,7 +94,7 @@ pub mod Validator {
             assert!(amount >= self.stake_amount.read(), "Staked amount is less than minimum stake amount");
 
             let caller = get_caller_address();
-            let contract_address = get_contract_address();
+            let validator_contract_address = get_contract_address();
 
             if self.returning_validator.read(caller) {
                 let validator_id = self.get_validator_id(caller);
@@ -102,7 +105,7 @@ pub mod Validator {
                 self.validators.write(validator_id, validator_info);
                 self.validator_stakes.write(validator_id, amount);
 
-                Event::Staked(Staked {
+                self.emit(Staked {
                     validator_id: validator_id,
                     stake: amount,
                 });
@@ -115,7 +118,6 @@ pub mod Validator {
                     stake: amount,
                     address: caller,
                     status: Status::Active,
-                    validated_campaigns: ArrayTrait::<u32>::new(),
                 };
 
                 self.total_validators.write(validator_id);
@@ -123,7 +125,7 @@ pub mod Validator {
                 self.validators.write(validator_id, validator_info);
                 self.validator_stakes.write(validator_id, amount);
 
-                Event::Staked(Staked {
+                self.emit(Staked {
                     validator_id: validator_id,
                     stake: amount,
                 });
@@ -132,7 +134,14 @@ pub mod Validator {
             self.total_active_validators.write(self.total_active_validators.read() + 1);
 
             // Perform the transfer
-            transfer(contract_address, amount).unwrap();
+            let eth_dispatcher = IERC20Dispatcher {
+                contract_address: contract_address_const::<0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d>() // STRK token Contract Address
+            };
+            assert(eth_dispatcher.balance_of(caller) >= amount.into(), 'insufficient funds');
+
+            eth_dispatcher.approve(validator_contract_address, amount.into());
+            let success = eth_dispatcher.transfer_from(caller, validator_contract_address, amount.into());
+            assert(success, 'ERC20 transfer_from fail!');
 
             // Update the contract's balance
             let current_balance = self.total_stakes.read();
@@ -155,13 +164,17 @@ pub mod Validator {
             self.total_active_validators.write(self.total_active_validators.read() - 1);
 
             // Perform the transfer
-            transfer(caller, amount).unwrap();
+            let eth_dispatcher = IERC20Dispatcher {
+                contract_address: contract_address_const::<0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d>() // STRK token Contract Address
+            };
+            let success = eth_dispatcher.transfer(caller, stake.into());
+            assert(success, 'ERC20 transfer fail!');
 
             // Update the contract's balance
             let current_balance = self.total_stakes.read();
             self.total_stakes.write(current_balance - stake);
 
-            Event::Unstaked(Unstaked {
+            self.emit(Unstaked {
                 validator_id: validator_id,
                 stake: stake,
             });
@@ -172,17 +185,20 @@ pub mod Validator {
             let caller = get_caller_address();
             let validator_id = self.get_validator_id(caller);
 
-            let mut validator_info = self.validators.read(validator_id);
-            validator_info.validated_campaigns.append(campaign_id);
+            assert!(self.validators.read(validator_id).status == Status::Active, "Validator is not active");
+            assert!(!self.is_campaign_validated.read((validator_id, campaign_id)), "Campaign already validated");
 
-            self.validators.write(validator_id, validator_info);
+            let count = (self.validator_campaign_count.read(validator_id) + 1);
+            self.validated_campaigns.write((validator_id, count), campaign_id);
+            self.validator_campaign_count.write(validator_id, count);
 
-            let mut campaign_validators = self.campaign_validations.read(campaign_id);
-            campaign_validators.append(validator_id);
+            let campaign_validator_count = (self.campaign_validators_count.read(campaign_id) + 1);
+            self.campaign_validators.write((campaign_id, campaign_validator_count), validator_id);
+            self.campaign_validators_count.write(campaign_id, campaign_validator_count);
 
-            self.campaign_validations.write(campaign_id, campaign_validators);
+            self.is_campaign_validated.write((validator_id, campaign_id), true);
 
-            Event::CampaignValidated(CampaignValidated {
+            self.emit(CampaignValidated {
                 validator_id: validator_id,
                 campaign_id: campaign_id,
             });
@@ -220,7 +236,16 @@ pub mod Validator {
         }
 
         fn get_campaign_validators(self: @ContractState, campaign_id: u32) -> Array<u32> {
-            self.campaign_validations.read(campaign_id)
+            let mut campaign_validators = ArrayTrait::<u32>::new();
+            let mut count = self.campaign_validators_count.read(campaign_id);
+
+            while count > 0 {
+                let validator_id = self.campaign_validators.read((campaign_id, count));
+                campaign_validators.append(validator_id);
+                count -= 1;
+            };
+
+            campaign_validators
         }
 
         fn get_validator_id(self: @ContractState, address: ContractAddress) -> u32 {
