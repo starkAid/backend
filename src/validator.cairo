@@ -13,7 +13,7 @@ trait IValidatorTrait <TContractState> {
 }
 
 #[starknet::contract]
-mod Validator {
+pub mod Validator {
     use starknet::{ContractAddress, get_caller_address, get_contract_address};
     use starknet::syscalls::transfer;
 
@@ -41,14 +41,16 @@ mod Validator {
     pub struct Staked {
         #[key]
         pub validator_id: u32,
-        pub stake: u32,
+        #[key]
+        pub stake: u128,
     }
 
     #[derive(Drop, starknet::Event)]
     pub struct Unstaked {
         #[key]
         pub validator_id: u32,
-        pub stake: u32,
+        #[key]
+        pub stake: u128,
     }
 
     #[derive(Drop, starknet::Event)]
@@ -59,7 +61,7 @@ mod Validator {
         pub campaign_id: u32,
     }
 
-    #[derive(Copy, Drop, Clone, Serde, starknet::Contract)]
+    #[derive(Copy, Drop, Clone, Serde, PartialEq, starknet::Store)]
     enum Status {
         Inactive,
         Active,
@@ -67,12 +69,12 @@ mod Validator {
     }
 
     #[derive(Drop, Serde, starknet::Store)]
-    struct ValidatorInfo {
-        validator_id: u32,
-        stake: u32,
-        address: ContractAddress,
-        status: Status,
-        validated_campaigns: Array<u32>, // List of campaign IDs validated by this validator
+    pub struct ValidatorInfo {
+        pub validator_id: u32,
+        pub stake: u128,
+        pub address: ContractAddress,
+        pub status: Status,
+        pub validated_campaigns: Array<u32>,
     }
 
     #[constructor]
@@ -91,12 +93,19 @@ mod Validator {
             let caller = get_caller_address();
             let contract_address = get_contract_address();
 
-            if self.returning_validator(caller) {
-                let validator_id = self.get_validator_id.read(caller);
+            if self.returning_validator.read(caller) {
+                let validator_id = self.get_validator_id(caller);
 
                 let mut validator_info = self.validators.read(validator_id);
                 validator_info.stake += amount;
                 validator_info.status = Status::Active;
+                self.validators.write(validator_id, validator_info);
+                self.validator_stakes.write(validator_id, amount);
+
+                Event::Staked(Staked {
+                    validator_id: validator_id,
+                    stake: amount,
+                });
             } else {
                 let current_validator_id = self.total_validators.read();
                 let validator_id = current_validator_id + 1;
@@ -106,15 +115,20 @@ mod Validator {
                     stake: amount,
                     address: caller,
                     status: Status::Active,
-                    validated_campaigns: Array::new(),
+                    validated_campaigns: ArrayTrait::<u32>::new(),
                 };
 
                 self.total_validators.write(validator_id);
-                self.returning_validator(caller) = true;
+                self.returning_validator.write(caller, true);
+                self.validators.write(validator_id, validator_info);
+                self.validator_stakes.write(validator_id, amount);
+
+                Event::Staked(Staked {
+                    validator_id: validator_id,
+                    stake: amount,
+                });
             }
 
-            self.validators.write(validator_id, validator_info);
-            self.validator_stakes.write(new_validator_id, stake);
             self.total_active_validators.write(self.total_active_validators.read() + 1);
 
             // Perform the transfer
@@ -124,16 +138,12 @@ mod Validator {
             let current_balance = self.total_stakes.read();
             self.total_stakes.write(current_balance + amount);
 
-            Event::Staked(Staked {
-                validator_id: validator_id,
-                stake: stake,
-            });
             true
         }
 
         fn unstake(ref self: ContractState) -> bool {
             let caller = get_caller_address();
-            let validator_id = self.get_validator_id.read(caller);
+            let validator_id = self.get_validator_id(caller);
 
             let mut validator_info = self.validators.read(validator_id);
             let stake = validator_info.stake;
@@ -145,7 +155,7 @@ mod Validator {
             self.total_active_validators.write(self.total_active_validators.read() - 1);
 
             // Perform the transfer
-            transfer(contract_address, amount).unwrap();
+            transfer(caller, amount).unwrap();
 
             // Update the contract's balance
             let current_balance = self.total_stakes.read();
@@ -160,7 +170,7 @@ mod Validator {
 
         fn validate_campaign(ref self: ContractState, campaign_id: u32) -> bool {
             let caller = get_caller_address();
-            let validator_id = self.get_validator_id.read(caller);
+            let validator_id = self.get_validator_id(caller);
 
             let mut validator_info = self.validators.read(validator_id);
             validator_info.validated_campaigns.append(campaign_id);
@@ -179,34 +189,34 @@ mod Validator {
             true
         }
 
-        fn get_total_validators(self: @ContractState) -> Array<ValidatorInfo> {
-            let mut validators = Array::new();
-            let count = self.total_validators.read();
+        fn get_all_validators(self: @ContractState) -> Array<ValidatorInfo> {
+            let mut validators = ArrayTrait::<ValidatorInfo>::new();
+            let mut count = self.total_validators.read();
 
             while count > 0 {
                 let validator = self.validators.read(count);
                 validators.append(validator);
                 count -= 1;
-            }
+            };
             
             validators
         }
 
         fn get_active_validators(self: @ContractState) -> Array<ValidatorInfo> {
-            let mut validators = Array::new();
-            let count = self.total_validators.read();
+            let mut active_validators = ArrayTrait::<ValidatorInfo>::new();
+            let mut count = self.total_validators.read();
 
             while count > 0 {
                 let validator = self.validators.read(count);
 
                 if validator.status == Status::Active {
-                    validators.append(validator);
+                    active_validators.append(validator);
                 }
 
                 count -= 1;
-            }
+            };
             
-            validators
+            active_validators
         }
 
         fn get_campaign_validators(self: @ContractState, campaign_id: u32) -> Array<u32> {
@@ -215,7 +225,7 @@ mod Validator {
 
         fn get_validator_id(self: @ContractState, address: ContractAddress) -> u32 {
             let mut validator_id = 0;
-            let count = self.total_validators.read();
+            let mut count = self.total_validators.read();
 
             while count > 0 {
                 let validator = self.validators.read(count);
@@ -226,7 +236,7 @@ mod Validator {
                 }
 
                 count -= 1;
-            }
+            };
 
             validator_id
         }
