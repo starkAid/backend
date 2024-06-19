@@ -2,6 +2,11 @@
 version = 1
 
 [[package]]
+name = "openzeppelin"
+version = "0.11.0"
+source = "git+https://github.com/OpenZeppelin/cairo-contracts.git?tag=v0.11.0#a83f36b23f1af6e160288962be4a2701c3ecbcda"
+
+[[package]]
 name = "snforge_std"
 version = "0.24.0"
 source = "git+https://github.com/foundry-rs/starknet-foundry?tag=v0.24.0#95e9fb09cb91b3c05295915179ee1b55bf923653"
@@ -10,5 +15,6 @@ source = "git+https://github.com/foundry-rs/starknet-foundry?tag=v0.24.0#95e9fb0
 name = "starkaid"
 version = "0.1.0"
 dependencies = [
+ "openzeppelin",
  "snforge_std",
 ]
