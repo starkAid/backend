@@ -1,15 +1,16 @@
 use starknet::ContractAddress;
 
 #[starknet::interface]
-trait IValidatorTrait <TContractState> {
+trait IValidator <TContractState> {
     fn stake(ref self: TContractState, amount: u128) -> bool;
     fn unstake(ref self: TContractState) -> bool;
-    fn validate_campaign(ref self: TContractState, campaign_id: u32) -> bool;
+    fn validate_campaign(ref self: TContractState, campaign_id: u32, response: bool) -> bool;
     fn get_all_validators(self: @TContractState) -> Array<Validator::ValidatorInfo>;
     fn get_active_validators(self: @TContractState) -> Array<Validator::ValidatorInfo>;
     fn get_campaign_validators(self: @TContractState, campaign_id: u32) -> Array<u32>;
     fn get_validator_id(self: @TContractState, address: ContractAddress) -> u32;
     fn get_validator(self: @TContractState, validator_id: u32) -> Validator::ValidatorInfo;
+    fn get_total_staked(self: @TContractState) -> u128;
 }
 
 #[starknet::contract]
@@ -63,6 +64,7 @@ pub mod Validator {
         pub validator_id: u32,
         #[key]
         pub campaign_id: u32,
+        pub response: bool,
     }
 
     #[derive(Copy, Drop, Clone, Serde, PartialEq, starknet::Store)]
@@ -84,12 +86,12 @@ pub mod Validator {
     fn constructor(ref self: ContractState) {
         self.total_validators.write(0);
         self.total_active_validators.write(0);
-        self.stake_amount.write(100);
+        self.stake_amount.write(10);
         self.total_stakes.write(0);
     }
 
     #[abi(embed_v0)]
-    impl ValidatorImpl of super::IValidatorTrait<ContractState> {
+    impl ValidatorImpl of super::IValidator<ContractState> {
         fn stake(ref self: ContractState, amount: u128) -> bool {
             assert!(amount >= self.stake_amount.read(), "Staked amount is less than minimum stake amount");
 
@@ -139,7 +141,7 @@ pub mod Validator {
             };
             assert(eth_dispatcher.balance_of(caller) >= amount.into(), 'insufficient funds');
 
-            eth_dispatcher.approve(validator_contract_address, amount.into());
+            // eth_dispatcher.approve(validator_contract_address, amount.into()); This is wrong as it is the validator contract trying to approve itself
             let success = eth_dispatcher.transfer_from(caller, validator_contract_address, amount.into());
             assert(success, 'ERC20 transfer_from fail!');
 
@@ -181,7 +183,7 @@ pub mod Validator {
             true
         }
 
-        fn validate_campaign(ref self: ContractState, campaign_id: u32) -> bool {
+        fn validate_campaign(ref self: ContractState, campaign_id: u32, response: bool) -> bool {
             let caller = get_caller_address();
             let validator_id = self.get_validator_id(caller);
 
@@ -201,8 +203,10 @@ pub mod Validator {
             self.emit(CampaignValidated {
                 validator_id: validator_id,
                 campaign_id: campaign_id,
+                response: response,
             });
-            true
+            
+            response
         }
 
         fn get_all_validators(self: @ContractState) -> Array<ValidatorInfo> {
@@ -268,6 +272,10 @@ pub mod Validator {
 
         fn get_validator(self: @ContractState, validator_id: u32) -> ValidatorInfo {
             self.validators.read(validator_id)
+        }
+
+        fn get_total_staked(self: @ContractState) -> u128 {
+            self.total_stakes.read()
         }
     }
 }

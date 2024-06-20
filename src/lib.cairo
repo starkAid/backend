@@ -1,2 +1,3 @@
 pub mod validator;
-mod progress_tracking;
+pub mod progress_tracking;
+pub mod validator_report;
