@@ -1,6 +1,11 @@
 use starknet::ContractAddress;
 
 #[starknet::interface]
+pub trait IAuth<TContractState> {
+    fn is_authenticated(ref self: TContractState, user_address: ContractAddress) -> bool;
+}
+
+#[starknet::interface]
 trait IValidator <TContractState> {
     fn is_validator(ref self: TContractState, address: ContractAddress) -> bool;
     fn validate_campaign(ref self: TContractState, campaign_id: u32, validator_address: ContractAddress) -> bool;
@@ -30,16 +35,19 @@ pub trait ICampaign<TContractState> {
     fn get_campaign(self: @TContractState, campaign_id: u32) -> Campaign::CampaignInfo;
     fn get_campaign_status(self: @TContractState, campaign_id: u32) -> Campaign::CampaignStatus;
     fn goal_not_reached(ref self: TContractState, campaign_id: u32, accept_funds: bool) -> bool;
+    fn is_beneficiary(ref self: TContractState, campaign_id: u32, address: ContractAddress) -> bool;
 }
 
 #[starknet::contract]
 pub mod Campaign {
     use starknet::{ContractAddress, get_caller_address, get_block_timestamp, contract_address_const, get_contract_address};
     use super::{IValidatorDispatcher, IValidatorDispatcherTrait};
+    use super::{IAuthDispatcher, IAuthDispatcherTrait};
     use openzeppelin::token::erc20::interface::{IERC20Dispatcher, IERC20DispatcherTrait};
 
     #[storage]
     struct Storage {
+        auth_contract_address: ContractAddress,
         validator_contract_address: ContractAddress,
         amount_donated: LegacyMap<u32, u128>,
         campaigns: LegacyMap<u32, CampaignInfo>,
@@ -137,7 +145,8 @@ pub mod Campaign {
     }
 
     #[constructor]
-    fn constructor(ref self: ContractState, validator_contract_address: ContractAddress) {
+    fn constructor(ref self: ContractState, auth_contract_address: ContractAddress, validator_contract_address: ContractAddress) {
+        self.auth_contract_address.write(auth_contract_address);
         self.validator_contract_address.write(validator_contract_address);
     }
 
@@ -158,6 +167,7 @@ pub mod Campaign {
             deadline: u64,
         ) -> bool {
             let caller = get_caller_address();
+            assert!(self._is_registered(caller), "You are not a registered user");
             assert!(!self._is_validator(caller), "Validators cannot create campaigns");
 
             let id = self.campaign_id.read() + 1;
@@ -200,9 +210,10 @@ pub mod Campaign {
         ) -> bool {
             let timestamp = get_block_timestamp();
             let caller = get_caller_address();
+            assert!(self._is_validator(caller), "Only validators can vote on campaigns");
+
             let validator_address = self.validator_contract_address.read();
             let validatorDispatcher = IValidatorDispatcher { contract_address: validator_address };
-
             let success = validatorDispatcher.validate_campaign(campaign_id, caller);
             assert(success, 'Validation failed!');
 
@@ -241,6 +252,9 @@ pub mod Campaign {
             ref self: ContractState,
             campaign_id: u32
         ) -> bool {
+            let caller = get_caller_address();
+            assert!(self._is_validator(caller), "Only validators can disburse payments");
+
             let mut campaign = self.campaigns.read(campaign_id);
             assert!(campaign.status == CampaignStatus::Approved, "Campaign not approved");
             assert!(campaign.status == CampaignStatus::GoalReached, "Campaign goal not reached");
@@ -347,6 +361,15 @@ pub mod Campaign {
         fn get_campaign_status(self: @ContractState, campaign_id: u32) -> CampaignStatus {
             self.campaigns.read(campaign_id).status
         }
+
+        fn is_beneficiary(
+            ref self: ContractState,
+            campaign_id: u32,
+            address: ContractAddress
+        ) -> bool {
+            assert!(self.campaigns.read(campaign_id).payment_disbursed, "Payments not disbursed yet");
+            self.campaigns.read(campaign_id).recipient == address
+        }
     }
 
     #[generate_trait]
@@ -372,13 +395,22 @@ pub mod Campaign {
     }
 
     #[generate_trait]
+    impl AuthImpl of AuthTrait {
+        fn _is_registered(ref self: ContractState, user_address: ContractAddress) -> bool {
+            let auth_address = self.auth_contract_address.read();
+            let authDispatcher = IAuthDispatcher { contract_address: auth_address };
+
+            authDispatcher.is_authenticated(user_address)
+        }
+    }
+
+    #[generate_trait]
     impl ValidatorImpl of ValidatorTrait {
         fn _is_validator(ref self: ContractState, address: ContractAddress) -> bool {
-            let caller = get_caller_address();
             let validator_address = self.validator_contract_address.read();
             let validatorDispatcher = IValidatorDispatcher { contract_address: validator_address };
 
-            validatorDispatcher.is_validator(caller)
+            validatorDispatcher.is_validator(address)
         }
     }
 
