@@ -20,29 +20,144 @@ async function main() {
   let sierraCode: any, casmCode: any;
 
   try {
+    ({ sierraCode, casmCode } = await getCompiledCode("starkaid_Auth"));
+  } catch (error: any) {
+    console.log("Failed to read contract files");
+    process.exit(1);
+  }
+
+  const authCallData = new CallData(sierraCode.abi);
+  const authConstructor = authCallData.compile("constructor", {});
+  const authDeployResponse = await account0.declareAndDeploy({
+    contract: sierraCode,
+    casm: casmCode,
+    constructorCalldata: authConstructor,
+    salt: stark.randomAddress(),
+  });
+
+  // Connect the new contract instance :
+  const authContract = new Contract(
+    sierraCode.abi,
+    authDeployResponse.deploy.contract_address,
+    provider
+  );
+  console.log(
+    `✅ Auth Contract has been deployed with the address: ${authContract.address}`
+  );
+
+  // DEPLOY VALIDATOR CONTRACT
+  try {
     ({ sierraCode, casmCode } = await getCompiledCode("starkaid_Validator"));
   } catch (error: any) {
     console.log("Failed to read contract files");
     process.exit(1);
   }
 
-  const myCallData = new CallData(sierraCode.abi);
-  const constructor = myCallData.compile("constructor", {});
-  const deployResponse = await account0.declareAndDeploy({
+  const validatorCallData = new CallData(sierraCode.abi);
+  const validatorConstructor = validatorCallData.compile("constructor", {});
+  const validatorDeployResponse = await account0.declareAndDeploy({
     contract: sierraCode,
     casm: casmCode,
-    constructorCalldata: constructor,
+    constructorCalldata: validatorConstructor,
     salt: stark.randomAddress(),
   });
 
   // Connect the new contract instance :
-  const myTestContract = new Contract(
+  const validatorContract = new Contract(
     sierraCode.abi,
-    deployResponse.deploy.contract_address,
+    validatorDeployResponse.deploy.contract_address,
     provider
   );
   console.log(
-    `✅ Contract has been deployed with the address: ${myTestContract.address}`
+    `✅ Validator Contract has been deployed with the address: ${validatorContract.address}`
+  );
+
+  // DEPLOY CAMPAIGN CONTRACT
+  try {
+    ({ sierraCode, casmCode } = await getCompiledCode("starkaid_Validator"));
+  } catch (error: any) {
+    console.log("Failed to read contract files");
+    process.exit(1);
+  }
+
+  const campaignCallData = new CallData(sierraCode.abi);
+  const campaignConstructor = campaignCallData.compile("constructor", {
+    auth_contract_address: authContract.address,
+    validator_contract_address: validatorContract.address,
+  });
+  const campaignDeployResponse = await account0.declareAndDeploy({
+    contract: sierraCode,
+    casm: casmCode,
+    constructorCalldata: campaignConstructor,
+    salt: stark.randomAddress(),
+  });
+
+  // Connect the new contract instance :
+  const campaignContract = new Contract(
+    sierraCode.abi,
+    campaignDeployResponse.deploy.contract_address,
+    provider
+  );
+  console.log(
+    `✅ Campaign Contract has been deployed with the address: ${campaignContract.address}`
+  );
+
+  // DEPLOY VALIDATOR REPORT CONTRACT
+  try {
+    ({ sierraCode, casmCode } = await getCompiledCode("starkaid_Validator"));
+  } catch (error: any) {
+    console.log("Failed to read contract files");
+    process.exit(1);
+  }
+
+  const validatorReportCallData = new CallData(sierraCode.abi);
+  const validatorReportConstructor = validatorReportCallData.compile("constructor", {
+    validator_contract_address: validatorContract.address,
+  });
+  const validatorReportDeployResponse = await account0.declareAndDeploy({
+    contract: sierraCode,
+    casm: casmCode,
+    constructorCalldata: validatorReportConstructor,
+    salt: stark.randomAddress(),
+  });
+
+  // Connect the new contract instance :
+  const validatorReportContract = new Contract(
+    sierraCode.abi,
+    validatorReportDeployResponse.deploy.contract_address,
+    provider
+  );
+  console.log(
+    `✅ Validator Report Contract has been deployed with the address: ${validatorReportContract.address}`
+  );
+
+  // DEPLOY PROGRESS TRACKING CONTRACT
+  try {
+    ({ sierraCode, casmCode } = await getCompiledCode("starkaid_Validator"));
+  } catch (error: any) {
+    console.log("Failed to read contract files");
+    process.exit(1);
+  }
+
+  const progressTrackingCallData = new CallData(sierraCode.abi);
+  const progressTrackingConstructor = progressTrackingCallData.compile("constructor", {
+    campaign_contract_address: campaignContract.address,
+  });
+  const progressTrackingDeployResponse = await account0.declareAndDeploy({
+    contract: sierraCode,
+    casm: casmCode,
+    constructorCalldata: progressTrackingConstructor,
+    salt: stark.randomAddress(),
+  });
+
+  // Connect the new contract instance :
+  const progressTrackingContract = new Contract(
+    sierraCode.abi,
+    progressTrackingDeployResponse.deploy.contract_address,
+    provider
+  );
+  console.log(
+    `✅ Progress Tracking Contract has been deployed with the address: ${progressTrackingContract.address}`
   );
 }
 main()
@@ -55,4 +170,8 @@ main()
 // Remember to run `scarb build` before deploying
 // Deploy with `npm run deploy`
 
-// ✅ Contract has been deploy with the address: 0x2fd80cb61ac8f35348d4e3d9fe9079fcfcc23cee9b80720076426b54e0cd37b
+// ✅ Auth Contract has been deployed with the address: 0x299212056bf8f140c4af2798d3a0dad035b89ccff70eddc8384a1735ec773b3
+// ✅ Validator Contract has been deployed with the address: 0x6034576de77e6dbc72f846fb590880b3dc1e6d7818d66198804422b3fcc65e5
+// ✅ Campaign Contract has been deployed with the address: 0x66446034b731411095b0edea017b8f959bcc8acbf1ffc53a464b821f6a706ec
+// ✅ Validator Report Contract has been deployed with the address: 0x469e82961670e188baf97c686ed3b6315936bee98526f60b447d3035a9af69b
+// ✅ Progress Tracking Contract has been deployed with the address: 0x4f7eaf1dcbe7552292be24e5e70e9e0d91106cd8fd85052f55dd70498a816f4
