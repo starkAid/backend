@@ -1,15 +1,17 @@
 use starknet::ContractAddress;
 
 #[starknet::interface]
-trait IValidator <TContractState> {
+pub trait IValidator <TContractState> {
     fn stake(ref self: TContractState, amount: u128) -> bool;
     fn unstake(ref self: TContractState) -> bool;
-    fn validate_campaign(ref self: TContractState, campaign_id: u32, response: bool) -> bool;
+    fn validate_campaign(ref self: TContractState, campaign_id: u32, validator_address: ContractAddress) -> bool;
     fn get_all_validators(self: @TContractState) -> Array<Validator::ValidatorInfo>;
     fn get_active_validators(self: @TContractState) -> Array<Validator::ValidatorInfo>;
+    fn get_active_validators_count(self: @TContractState) -> u32;
     fn get_campaign_validators(self: @TContractState, campaign_id: u32) -> Array<u32>;
     fn get_validator_id(self: @TContractState, address: ContractAddress) -> u32;
     fn get_validator(self: @TContractState, validator_id: u32) -> Validator::ValidatorInfo;
+    fn is_validator(ref self: TContractState, address: ContractAddress) -> bool;
     fn get_total_staked(self: @TContractState) -> u128;
 }
 
@@ -64,7 +66,6 @@ pub mod Validator {
         pub validator_id: u32,
         #[key]
         pub campaign_id: u32,
-        pub response: bool,
     }
 
     #[derive(Copy, Drop, Clone, Serde, PartialEq, starknet::Store)]
@@ -135,15 +136,7 @@ pub mod Validator {
 
             self.total_active_validators.write(self.total_active_validators.read() + 1);
 
-            // Perform the transfer
-            let eth_dispatcher = IERC20Dispatcher {
-                contract_address: contract_address_const::<0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d>() // STRK token Contract Address
-            };
-            assert(eth_dispatcher.balance_of(caller) >= amount.into(), 'insufficient funds');
-
-            // eth_dispatcher.approve(validator_contract_address, amount.into()); This is wrong as it is the validator contract trying to approve itself
-            let success = eth_dispatcher.transfer_from(caller, validator_contract_address, amount.into());
-            assert(success, 'ERC20 transfer_from fail!');
+            self._transfer_from(caller, validator_contract_address, amount.into());
 
             // Update the contract's balance
             let current_balance = self.total_stakes.read();
@@ -165,12 +158,7 @@ pub mod Validator {
             self.validator_stakes.write(validator_id, 0);
             self.total_active_validators.write(self.total_active_validators.read() - 1);
 
-            // Perform the transfer
-            let eth_dispatcher = IERC20Dispatcher {
-                contract_address: contract_address_const::<0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d>() // STRK token Contract Address
-            };
-            let success = eth_dispatcher.transfer(caller, stake.into());
-            assert(success, 'ERC20 transfer fail!');
+            self._transfer(caller, stake.into());
 
             // Update the contract's balance
             let current_balance = self.total_stakes.read();
@@ -183,9 +171,8 @@ pub mod Validator {
             true
         }
 
-        fn validate_campaign(ref self: ContractState, campaign_id: u32, response: bool) -> bool {
-            let caller = get_caller_address();
-            let validator_id = self.get_validator_id(caller);
+        fn validate_campaign(ref self: ContractState, campaign_id: u32, validator_address: ContractAddress) -> bool {
+            let validator_id = self.get_validator_id(validator_address);
 
             assert!(self.validators.read(validator_id).status == Status::Active, "Validator is not active");
             assert!(!self.is_campaign_validated.read((validator_id, campaign_id)), "Campaign already validated");
@@ -203,10 +190,9 @@ pub mod Validator {
             self.emit(CampaignValidated {
                 validator_id: validator_id,
                 campaign_id: campaign_id,
-                response: response,
             });
             
-            response
+            true
         }
 
         fn get_all_validators(self: @ContractState) -> Array<ValidatorInfo> {
@@ -237,6 +223,10 @@ pub mod Validator {
             };
             
             active_validators
+        }
+
+        fn get_active_validators_count(self: @ContractState) -> u32 {
+            self.total_active_validators.read()
         }
 
         fn get_campaign_validators(self: @ContractState, campaign_id: u32) -> Array<u32> {
@@ -274,8 +264,48 @@ pub mod Validator {
             self.validators.read(validator_id)
         }
 
+        fn is_validator(ref self: ContractState, address: ContractAddress) -> bool {
+            let mut is_validator = false;
+            let mut count = self.total_validators.read();
+
+            while count > 0 {
+                let validator = self.validators.read(count);
+
+                if validator.address == address {
+                    is_validator = true;
+                    break;
+                }
+
+                count -= 1;
+            };
+
+            is_validator
+        }
+
         fn get_total_staked(self: @ContractState) -> u128 {
             self.total_stakes.read()
+        }
+    }
+
+    #[generate_trait]
+    impl ERC20Impl of ERC20Trait {
+        fn _transfer_from(ref self: ContractState, sender: ContractAddress, recipient: ContractAddress, amount: u128) {
+            let eth_dispatcher = IERC20Dispatcher {
+                contract_address: contract_address_const::<0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d>() // STRK token Contract Address
+            };
+            assert(eth_dispatcher.balance_of(sender) >= amount.into(), 'insufficient funds');
+
+            // eth_dispatcher.approve(validator_contract_address, amount.into()); This is wrong as it is the validator contract trying to approve itself
+            let success = eth_dispatcher.transfer_from(sender, recipient, amount.into());
+            assert(success, 'ERC20 transfer_from failed!');
+        }
+
+        fn _transfer(ref self: ContractState, recipient: ContractAddress, amount: u128) {
+            let eth_dispatcher = IERC20Dispatcher {
+                contract_address: contract_address_const::<0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d>() // STRK token Contract Address
+            };
+            let success = eth_dispatcher.transfer(recipient, amount.into());
+            assert(success, 'ERC20 transfer failed!');
         }
     }
 }
