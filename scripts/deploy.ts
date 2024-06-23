@@ -170,8 +170,8 @@ main()
 // Remember to run `scarb build` before deploying
 // Deploy with `npm run deploy`
 
-// ✅ Auth Contract has been deployed with the address: 0x960940461313db120a76472a35b7fa5cab743125ef5f08c23397e5ac67099e
-// ✅ Validator Contract has been deployed with the address: 0x66432f3f7d41e5014b76141b67924cc709961367671290e17dce0eb08162334
-// ✅ Campaign Contract has been deployed with the address: 0x775d0322e55c4acf08f569d59a4cc6c0537c2fe531ab4ca5082a8c3be9b2da
-// ✅ Validator Report Contract has been deployed with the address: 0x3ae3056c9224b2db375145ea5cb06d5ce2a8221b187645629a56a2c820f9986
-// ✅ Progress Tracking Contract has been deployed with the address: 0x76e27857c27b9c44561c3bdc3bd1bb06c827a929f0ff44cea0e2cbbfc33c4f3
+// ✅ Auth Contract has been deployed with the address: 0x16e9dbed7b3ab95fe62b1ff58385ad136d1c503484e39314feb7123d23f3edf
+// ✅ Validator Contract has been deployed with the address: 0x3ad36f5a64f9c119b84c9251b9f4c7fc399b0a626a8034e0881842cbb9728bf
+// ✅ Campaign Contract has been deployed with the address: 0x4a54378cc63124f31527e9e686e5423bf856564bde5b9c0dd5cfd1c2997d54a
+// ✅ Validator Report Contract has been deployed with the address: 0x5ccdd9c9d01767bc5b001ef387c4de195a91ca2384e624c4d6397bc8c887627
+// ✅ Progress Tracking Contract has been deployed with the address: 0x915d2cc7288ff1eebdd8a4e80052a756074d88bb816b7a4ad4cb54c2b0b8fb
