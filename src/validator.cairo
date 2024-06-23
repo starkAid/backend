@@ -2,7 +2,7 @@ use starknet::ContractAddress;
 
 #[starknet::interface]
 pub trait IValidator <TContractState> {
-    fn stake(ref self: TContractState, amount: u128) -> bool;
+    fn stake(ref self: TContractState) -> bool;
     fn unstake(ref self: TContractState) -> bool;
     fn validate_campaign(ref self: TContractState, campaign_id: u32, validator_address: ContractAddress) -> bool;
     fn get_all_validators(self: @TContractState) -> Array<Validator::ValidatorInfo>;
@@ -87,14 +87,14 @@ pub mod Validator {
     fn constructor(ref self: ContractState) {
         self.total_validators.write(0);
         self.total_active_validators.write(0);
-        self.stake_amount.write(10);
+        self.stake_amount.write(10000000000000000000);
         self.total_stakes.write(0);
     }
 
     #[abi(embed_v0)]
     impl ValidatorImpl of super::IValidator<ContractState> {
-        fn stake(ref self: ContractState, amount: u128) -> bool {
-            assert!(amount >= self.stake_amount.read(), "Staked amount is less than minimum stake amount");
+        fn stake(ref self: ContractState) -> bool {
+            let amount = self.stake_amount.read();
 
             let caller = get_caller_address();
             let validator_contract_address = get_contract_address();
