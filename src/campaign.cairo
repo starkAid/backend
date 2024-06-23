@@ -2,7 +2,7 @@ use starknet::ContractAddress;
 
 #[starknet::interface]
 pub trait IAuth<TContractState> {
-    fn is_authenticated(self: @TContractState, user_address: ContractAddress) -> bool;
+    fn get_user_id(self: @TContractState, address: ContractAddress) -> u32;
 }
 
 #[starknet::interface]
@@ -191,6 +191,7 @@ pub mod Campaign {
                 payment_disbursed: false
             };
             self.campaigns.write(id, new_campaign);
+            self.campaign_id.write(self.campaign_id.read() + 1);
             let e_campaign = self.campaigns.read(id);
             self.emit(CampaignCreated {
                 id: e_campaign.id,
@@ -222,7 +223,6 @@ pub mod Campaign {
 
             if approve {
                 let accepted_votes = self.accept_campaign.read(campaign_id);
-                self.accept_campaign.write(campaign_id, accepted_votes + 1);
 
                 if accepted_votes + 1 >= self._get_quorum() * 2 / 3 {
                     campaign.status = CampaignStatus::Approved;
@@ -231,13 +231,14 @@ pub mod Campaign {
                 } else {
                     campaign.status = CampaignStatus::Reviewing;
                 }
+                self.accept_campaign.write(campaign_id, accepted_votes + 1);
             } else {
                 let rejected_votes = self.reject_campaign.read(campaign_id);
-                self.reject_campaign.write(campaign_id, rejected_votes + 1);
 
                 if rejected_votes + 1 >= self._get_quorum() * 2 / 3 {
                     campaign.status = CampaignStatus::Rejected;
                 }
+                self.reject_campaign.write(campaign_id, rejected_votes + 1);
             }
 
             self.campaigns.write(campaign_id, campaign);
@@ -257,7 +258,6 @@ pub mod Campaign {
             assert!(self._is_validator(caller), "Only validators can disburse payments");
 
             let mut campaign = self.campaigns.read(campaign_id);
-            assert!(campaign.status == CampaignStatus::Approved, "Campaign not approved");
             assert!(campaign.status == CampaignStatus::GoalReached, "Campaign goal not reached");
             assert!(!campaign.payment_disbursed, "Payments already disbursed");
 
@@ -285,33 +285,36 @@ pub mod Campaign {
         ) {
             let campaign_contract_address = get_contract_address();
             let donor_address = get_caller_address();
-            let mut campaign = self.campaigns.read(campaign_id);
+            let campaign = self.campaigns.read(campaign_id);
             assert!(get_block_timestamp() < campaign.deadline, "Campaign deadline has passed");
             assert!(campaign.status == CampaignStatus::Approved, "Campaign not approved");
             assert!(campaign.status != CampaignStatus::GoalReached, "Campaign goal already reached");
 
-            self._transfer_from(donor_address, campaign_contract_address, amount);
+            if campaign.funds_raised < campaign.goal {
+                let mut campaign_clone = self.campaigns.read(campaign_id);
+                self._transfer_from(donor_address, campaign_contract_address, amount);
+                campaign_clone.funds_raised += amount;
+                self.campaigns.write(campaign_id, campaign_clone);
 
-            if campaign.funds_raised >= campaign.goal {
-                campaign.status = CampaignStatus::GoalReached;
+                let donor_id = self.donor_count.read(campaign_id) + 1;
+                self.donors.write((campaign_id, donor_id), donor_address);
+                self.comment_uris.write((campaign_id, donor_id), comment_uri);
+                self.donor_count.write(campaign_id, donor_id);
+
+                self.donations.write((campaign_id, donor_address), amount);
+                self.amount_donated.write(campaign_id, self.amount_donated.read(campaign_id) + amount);
+
+                self.emit(DonationMade {
+                    campaign_id,
+                    donor: donor_address,
+                    amount
+                });
+            } else {
+                let mut campaign_clone2 = self.campaigns.read(campaign_id);
+                campaign_clone2.status = CampaignStatus::GoalReached;
+                self.campaigns.write(campaign_id, campaign_clone2);
                 self.disburse_payments(campaign_id);
             }
-            campaign.funds_raised += amount;
-            self.campaigns.write(campaign_id, campaign);
-
-            let donor_id = self.donor_count.read(campaign_id) + 1;
-            self.donors.write((campaign_id, donor_id), donor_address);
-            self.comment_uris.write((campaign_id, donor_id), comment_uri);
-            self.donor_count.write(campaign_id, donor_id);
-
-            self.donations.write((campaign_id, donor_address), amount);
-            self.amount_donated.write(campaign_id, self.amount_donated.read(campaign_id) + amount);
-
-            self.emit(DonationMade {
-                campaign_id,
-                donor: donor_address,
-                amount
-            });
         }
 
         fn goal_not_reached(
@@ -401,7 +404,9 @@ pub mod Campaign {
             let auth_address = self.auth_contract_address.read();
             let authDispatcher = IAuthDispatcher { contract_address: auth_address };
 
-            authDispatcher.is_authenticated(user_address)
+            let user_id = authDispatcher.get_user_id(user_address);
+            assert!(user_id != 0, "User not registered");
+            true
         }
     }
 
