@@ -2,12 +2,12 @@ use starknet::ContractAddress;
 
 #[starknet::interface]
 pub trait IAuth<TContractState> {
-    fn is_authenticated(ref self: TContractState, user_address: ContractAddress) -> bool;
+    fn is_authenticated(self: @TContractState, user_address: ContractAddress) -> bool;
 }
 
 #[starknet::interface]
 trait IValidator <TContractState> {
-    fn is_validator(ref self: TContractState, address: ContractAddress) -> bool;
+    fn is_validator(self: @TContractState, address: ContractAddress) -> bool;
     fn validate_campaign(ref self: TContractState, campaign_id: u32, validator_address: ContractAddress) -> bool;
     fn get_active_validators_count(self: @TContractState) -> u32;
 }
@@ -191,14 +191,14 @@ pub mod Campaign {
                 payment_disbursed: false
             };
             self.campaigns.write(id, new_campaign);
-            self.campaign_id.write(id);
+            let e_campaign = self.campaigns.read(id);
             self.emit(CampaignCreated {
-                id,
-                name,
-                title,
-                goal,
-                location,
-                deadline
+                id: e_campaign.id,
+                name: e_campaign.name,
+                title: e_campaign.title,
+                goal: e_campaign.goal,
+                location: e_campaign.location,
+                deadline: e_campaign.deadline
             });
             true
         }
@@ -226,6 +226,7 @@ pub mod Campaign {
 
                 if accepted_votes + 1 >= self._get_quorum() * 2 / 3 {
                     campaign.status = CampaignStatus::Approved;
+                    campaign.validated = true;
                     campaign.deadline = timestamp + campaign.deadline;
                 } else {
                     campaign.status = CampaignStatus::Reviewing;

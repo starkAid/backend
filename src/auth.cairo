@@ -6,7 +6,7 @@ pub trait IAuth<TContractState> {
     fn get_user(self: @TContractState, index: u32) -> Auth::User;    
     fn get_all_users(self: @TContractState) -> Array<Auth::User>;
     fn update_username(ref self: TContractState, newUsername: felt252) -> bool;
-    fn is_authenticated(ref self: TContractState, user_address: ContractAddress) -> bool;
+    fn is_authenticated(self: @TContractState, user_address: ContractAddress) -> bool;
 }
 
 #[starknet::contract]
@@ -16,7 +16,6 @@ mod Auth {
     #[storage]
     struct Storage {
        address_to_userId: LegacyMap<ContractAddress, u32>,
-       name_to_address: LegacyMap<felt252, ContractAddress>,
        allUsers: LegacyMap::<u32, User>,
        userId: u32
     }  
@@ -58,7 +57,8 @@ mod Auth {
             self.userId.write(currentId);
             self.address_to_userId.write(userAddress, currentId);
 
-            self.emit(RegistrationSuccessiful{userAddress: userAddress, userName: username})
+            let e_user = self.allUsers.read(currentId);
+            self.emit(RegistrationSuccessiful{userAddress: e_user.address, userName: e_user.username})
         }
 
         fn update_username(ref self: ContractState, newUsername: felt252) -> bool{
@@ -88,7 +88,7 @@ mod Auth {
             users
         }
 
-        fn is_authenticated(ref self: ContractState, user_address: ContractAddress) -> bool {
+        fn is_authenticated(self: @ContractState, user_address: ContractAddress) -> bool {
             let user_id = self._get_user_id(user_address);
 
             user_id != 0
@@ -98,13 +98,13 @@ mod Auth {
     #[generate_trait]
     impl PrivateImpl of PrivateTrait {
         fn _register_user(ref self: ContractState, currentId: u32, username: felt252, address: ContractAddress) {
-            let existing_name = self.name_to_address.read(username);
+            let user_clone = self.allUsers.read(currentId);
+            let existing_address = user_clone.address;
             let addressZero: ContractAddress = contract_address_const::<0>();
-            assert(existing_name == addressZero, 'Name already taken');
+            assert(existing_address == addressZero, 'Name already taken');
 
             let user = User{id: currentId, username: username, address:address};
             self.allUsers.write(currentId, user);
-            self.name_to_address.write(username, address);
         }
 
         fn _get_user_id(self: @ContractState, user_address: ContractAddress) -> u32 {

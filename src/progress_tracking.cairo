@@ -2,7 +2,7 @@ use starknet::ContractAddress;
 
 #[starknet::interface]
 pub trait ICampaign<TContractState> {
-    fn is_beneficiary(ref self: TContractState, campaign_id: u32, address: ContractAddress) -> bool;
+    fn is_beneficiary(self: @TContractState, campaign_id: u32, address: ContractAddress) -> bool;
 }
 
 #[starknet::interface]

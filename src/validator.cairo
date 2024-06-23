@@ -11,7 +11,7 @@ pub trait IValidator <TContractState> {
     fn get_campaign_validators(self: @TContractState, campaign_id: u32) -> Array<u32>;
     fn get_validator_id(self: @TContractState, address: ContractAddress) -> u32;
     fn get_validator(self: @TContractState, validator_id: u32) -> Validator::ValidatorInfo;
-    fn is_validator(ref self: TContractState, address: ContractAddress) -> bool;
+    fn is_validator(self: @TContractState, address: ContractAddress) -> bool;
     fn get_total_staked(self: @TContractState) -> u128;
 }
 
@@ -264,7 +264,7 @@ pub mod Validator {
             self.validators.read(validator_id)
         }
 
-        fn is_validator(ref self: ContractState, address: ContractAddress) -> bool {
+        fn is_validator(self: @ContractState, address: ContractAddress) -> bool {
             let mut is_validator = false;
             let mut count = self.total_validators.read();
 
