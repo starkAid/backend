@@ -3,7 +3,7 @@ use starknet::ContractAddress;
 #[starknet::interface]
 trait IValidator <TContractState> {
     fn get_validator_id(self: @TContractState, address: ContractAddress) -> u32;
-    fn is_validator(ref self: TContractState, address: ContractAddress) -> bool;
+    fn is_validator(self: @TContractState, address: ContractAddress) -> bool;
 }
 
 #[starknet::interface]

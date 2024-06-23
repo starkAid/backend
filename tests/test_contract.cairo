@@ -7,7 +7,7 @@
 // use starkaid::IHelloStarknetDispatcher;
 // use starkaid::IHelloStarknetDispatcherTrait;
 
-// fn deploy_contract(name: ByteArray) -> ContractAddress {
+// fn deploy_contract(name: felt252) -> ContractAddress {
 //     let contract = declare(name).unwrap();
 //     let (contract_address, _) = contract.deploy(@ArrayTrait::new()).unwrap();
 //     contract_address

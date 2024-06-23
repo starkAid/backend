@@ -74,7 +74,7 @@ async function main() {
 
   // DEPLOY CAMPAIGN CONTRACT
   try {
-    ({ sierraCode, casmCode } = await getCompiledCode("starkaid_Validator"));
+    ({ sierraCode, casmCode } = await getCompiledCode("starkaid_Campaign"));
   } catch (error: any) {
     console.log("Failed to read contract files");
     process.exit(1);
@@ -104,7 +104,7 @@ async function main() {
 
   // DEPLOY VALIDATOR REPORT CONTRACT
   try {
-    ({ sierraCode, casmCode } = await getCompiledCode("starkaid_Validator"));
+    ({ sierraCode, casmCode } = await getCompiledCode("starkaid_ValidatorReport"));
   } catch (error: any) {
     console.log("Failed to read contract files");
     process.exit(1);
@@ -133,7 +133,7 @@ async function main() {
 
   // DEPLOY PROGRESS TRACKING CONTRACT
   try {
-    ({ sierraCode, casmCode } = await getCompiledCode("starkaid_Validator"));
+    ({ sierraCode, casmCode } = await getCompiledCode("starkaid_ProgressTracking"));
   } catch (error: any) {
     console.log("Failed to read contract files");
     process.exit(1);
@@ -170,8 +170,8 @@ main()
 // Remember to run `scarb build` before deploying
 // Deploy with `npm run deploy`
 
-// ✅ Auth Contract has been deployed with the address: 0x299212056bf8f140c4af2798d3a0dad035b89ccff70eddc8384a1735ec773b3
-// ✅ Validator Contract has been deployed with the address: 0x6034576de77e6dbc72f846fb590880b3dc1e6d7818d66198804422b3fcc65e5
-// ✅ Campaign Contract has been deployed with the address: 0x66446034b731411095b0edea017b8f959bcc8acbf1ffc53a464b821f6a706ec
-// ✅ Validator Report Contract has been deployed with the address: 0x469e82961670e188baf97c686ed3b6315936bee98526f60b447d3035a9af69b
-// ✅ Progress Tracking Contract has been deployed with the address: 0x4f7eaf1dcbe7552292be24e5e70e9e0d91106cd8fd85052f55dd70498a816f4
+// ✅ Auth Contract has been deployed with the address: 0x960940461313db120a76472a35b7fa5cab743125ef5f08c23397e5ac67099e
+// ✅ Validator Contract has been deployed with the address: 0x66432f3f7d41e5014b76141b67924cc709961367671290e17dce0eb08162334
+// ✅ Campaign Contract has been deployed with the address: 0x775d0322e55c4acf08f569d59a4cc6c0537c2fe531ab4ca5082a8c3be9b2da
+// ✅ Validator Report Contract has been deployed with the address: 0x3ae3056c9224b2db375145ea5cb06d5ce2a8221b187645629a56a2c820f9986
+// ✅ Progress Tracking Contract has been deployed with the address: 0x76e27857c27b9c44561c3bdc3bd1bb06c827a929f0ff44cea0e2cbbfc33c4f3
